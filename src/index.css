@@ -1,0 +1,186 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800;900&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 80% 3%;
+    --foreground: 180 100% 95%;
+
+    --card: 210 60% 6%;
+    --card-foreground: 180 100% 95%;
+
+    --popover: 210 60% 6%;
+    --popover-foreground: 180 100% 95%;
+
+    --primary: 163 100% 50%;
+    --primary-foreground: 210 80% 3%;
+
+    --secondary: 220 100% 50%;
+    --secondary-foreground: 180 100% 95%;
+
+    --muted: 210 40% 12%;
+    --muted-foreground: 200 20% 55%;
+
+    --accent: 220 100% 50%;
+    --accent-foreground: 180 100% 95%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 200 40% 15%;
+    --input: 200 40% 15%;
+    --ring: 163 100% 50%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 210 60% 5%;
+    --sidebar-foreground: 180 100% 95%;
+    --sidebar-primary: 163 100% 50%;
+    --sidebar-primary-foreground: 210 80% 3%;
+    --sidebar-accent: 220 100% 50%;
+    --sidebar-accent-foreground: 180 100% 95%;
+    --sidebar-border: 200 40% 15%;
+    --sidebar-ring: 163 100% 50%;
+
+    /* Custom abyss tokens */
+    --abyss-bg: #010a0f;
+    --abyss-teal: #00ffcc;
+    --abyss-blue: #0066ff;
+    --abyss-glow-teal: 0 255 204;
+    --abyss-glow-blue: 0 102 255;
+    --porthole-border: rgba(0, 255, 204, 0.15);
+    --porthole-glass: rgba(0, 20, 40, 0.6);
+  }
+
+  .dark {
+    --background: 210 80% 3%;
+    --foreground: 180 100% 95%;
+    --card: 210 60% 6%;
+    --card-foreground: 180 100% 95%;
+    --popover: 210 60% 6%;
+    --popover-foreground: 180 100% 95%;
+    --primary: 163 100% 50%;
+    --primary-foreground: 210 80% 3%;
+    --secondary: 220 100% 50%;
+    --secondary-foreground: 180 100% 95%;
+    --muted: 210 40% 12%;
+    --muted-foreground: 200 20% 55%;
+    --accent: 220 100% 50%;
+    --accent-foreground: 180 100% 95%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 200 40% 15%;
+    --input: 200 40% 15%;
+    --ring: 163 100% 50%;
+    --sidebar-background: 210 60% 5%;
+    --sidebar-foreground: 180 100% 95%;
+    --sidebar-primary: 163 100% 50%;
+    --sidebar-primary-foreground: 210 80% 3%;
+    --sidebar-accent: 220 100% 50%;
+    --sidebar-accent-foreground: 180 100% 95%;
+    --sidebar-border: 200 40% 15%;
+    --sidebar-ring: 163 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    /* Ensure proper viewport behavior on mobile */
+    font-size: 16px;
+  }
+
+  @media (max-width: 480px) {
+    html {
+      font-size: 14px;
+    }
+  }
+
+  body {
+    @apply bg-background text-foreground font-body;
+    background-color: var(--abyss-bg);
+    /* Prevent zoom on input focus for iOS */
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif;
+  }
+
+  /* Touch-friendly input sizing */
+  button, input, select, textarea {
+    font-size: 16px;
+    min-height: 44px;
+    @apply transition-colors;
+  }
+
+  @media (min-width: 768px) {
+    button, input, select, textarea {
+      font-size: inherit;
+    }
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(0, 255, 204, 0.2);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 255, 204, 0.4);
+  }
+}
+
+@layer utilities {
+  .glow-teal {
+    box-shadow: 0 0 15px rgba(0, 255, 204, 0.3), 0 0 60px rgba(0, 255, 204, 0.1);
+  }
+  .glow-blue {
+    box-shadow: 0 0 15px rgba(0, 102, 255, 0.3), 0 0 60px rgba(0, 102, 255, 0.1);
+  }
+  .glow-teal-text {
+    text-shadow: 0 0 10px rgba(0, 255, 204, 0.5), 0 0 40px rgba(0, 255, 204, 0.2);
+  }
+  .glow-blue-text {
+    text-shadow: 0 0 10px rgba(0, 102, 255, 0.5), 0 0 40px rgba(0, 102, 255, 0.2);
+  }
+  .porthole {
+    background: var(--porthole-glass);
+    border: 2px solid var(--porthole-border);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .porthole-heavy {
+    background: rgba(0, 15, 30, 0.8);
+    border: 3px solid rgba(0, 255, 204, 0.2);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    box-shadow: inset 0 0 30px rgba(0, 255, 204, 0.05), 0 0 20px rgba(0, 255, 204, 0.1);
+  }
+
+  /* Mobile-friendly utilities */
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+    @apply flex items-center justify-center;
+  }
+
+  .mobile-safe-padding {
+    padding: max(1rem, env(safe-area-inset-top))
+             max(1rem, env(safe-area-inset-right))
+             max(1rem, env(safe-area-inset-bottom))
+             max(1rem, env(safe-area-inset-left));
+  }
+}

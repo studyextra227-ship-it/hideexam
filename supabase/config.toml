@@ -1,0 +1,13 @@
+project_id = "ttsdnssmharezqyavzlf"
+
+[functions.verify-pin]
+verify_jwt = false
+
+[functions.vault-upload]
+verify_jwt = false
+
+[functions.vault-files]
+verify_jwt = false
+
+[functions.vault-delete]
+verify_jwt = false
