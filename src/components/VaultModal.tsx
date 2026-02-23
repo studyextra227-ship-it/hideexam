@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, Trash2, Download, FileText, X, Lock, Loader2 } from "lucide-react";
+import { Upload, Download, FileText, X, Lock, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface VaultFile {
@@ -115,21 +115,6 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const handleDelete = async (fileName: string) => {
-    try {
-      const { error } = await supabase.functions.invoke("vault-delete", {
-        body: { pin: storedPin.current, fileName },
-      });
-      if (error) {
-        console.error("Error deleting file:", error);
-        return;
-      }
-      await fetchFiles(storedPin.current);
-    } catch (error) {
-      console.error("Failed to delete file:", error);
     }
   };
 
@@ -365,15 +350,6 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
                           aria-label="Download file"
                         >
                           <Download size={18} />
-                        </motion.button>
-                        <motion.button
-                          onClick={() => handleDelete(file.name)}
-                          className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors touch-target"
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                          aria-label="Delete file"
-                        >
-                          <Trash2 size={18} />
                         </motion.button>
                       </div>
                     </motion.div>
