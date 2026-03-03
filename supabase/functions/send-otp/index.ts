@@ -17,8 +17,9 @@ serve(async (req) => {
     }
 
     try {
-        const { purpose } = await req.json();
+        const { purpose, email } = await req.json();
         // purpose: "admin_verify" | "pin_reset"
+        // email: Used for "admin_verify" to verify the user knows the admin email
 
         const adminEmail = Deno.env.get("ADMIN_EMAIL");
         const resendApiKey = Deno.env.get("RESEND_API_KEY");
@@ -28,6 +29,22 @@ serve(async (req) => {
                 JSON.stringify({ error: "ADMIN_EMAIL not configured" }),
                 { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
+        }
+
+        if (purpose === "admin_verify") {
+            if (!email) {
+                return new Response(
+                    JSON.stringify({ error: "Email is required to verify admin access" }),
+                    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+            }
+            if (email.toLowerCase().trim() !== adminEmail.toLowerCase().trim()) {
+                // Return a generic error to prevent email guessing, or an explicit one.
+                return new Response(
+                    JSON.stringify({ error: "Invalid admin email provided" }),
+                    { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+            }
         }
 
         if (!resendApiKey) {

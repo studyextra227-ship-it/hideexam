@@ -28,6 +28,7 @@ interface VaultModalProps {
 
 type AuthStage =
   | "pin"            // Enter PIN
+  | "admin_email_prompt" // Admin: Enter email to receive OTP
   | "admin_otp"      // Admin: Enter email OTP
   | "forgot_otp"     // Forgot PIN: Enter email OTP
   | "forgot_newpin"  // Forgot PIN: Set new PIN
@@ -162,6 +163,7 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
   const [otpError, setOtpError] = useState(false);
   const [otpSending, setOtpSending] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
+  const [adminEmailInput, setAdminEmailInput] = useState("");
   const [maskedEmail, setMaskedEmail] = useState("");
   const [otpResendCooldown, setOtpResendCooldown] = useState(0);
 
@@ -219,10 +221,13 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
     setTimeout(() => setPinError(false), 1500);
   };
 
-  const sendOtp = async (purpose: "admin_verify" | "pin_reset") => {
+  const sendOtp = async (purpose: "admin_verify" | "pin_reset", extraEmail?: string) => {
     setOtpSending(true);
     try {
-      const { data, error } = await supabase.functions.invoke("send-otp", { body: { purpose } });
+      const payload: any = { purpose };
+      if (extraEmail) payload.email = extraEmail.trim();
+
+      const { data, error } = await supabase.functions.invoke("send-otp", { body: payload });
       if (error || !data?.success) {
         alert("Failed to send OTP. Check ADMIN_EMAIL and RESEND_API_KEY secrets.");
         return false;
@@ -248,9 +253,8 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
       }
       storedPin.current = enteredPin;
       if (data.isAdmin && data.requiresOtp) {
-        // Admin: send OTP, move to admin_otp stage
-        const sent = await sendOtp("admin_verify");
-        if (sent) setStage("admin_otp");
+        // Admin: Prompt for email
+        setStage("admin_email_prompt");
       } else {
         setStage("vault");
         fetchFiles(enteredPin);
@@ -479,7 +483,7 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
 
   const handleClose = () => {
     setStage("pin");
-    setPin(""); setOtp(""); setNewPin(""); setNewPinConfirm("");
+    setPin(""); setOtp(""); setNewPin(""); setNewPinConfirm(""); setAdminEmailInput("");
     setPinError(false); setOtpError(false); setPinMismatch(false); setPinSaved(false);
     setFiles([]); setUploadQueue([]); setDragging(false);
     setRenamingFile(null); setRenameValue("");
@@ -585,6 +589,73 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
               </motion.div>
             )}
 
+            {/* ── Stage: Admin Email Prompt ── */}
+            {stage === "admin_email_prompt" && (
+              <motion.div
+                key="admin_email_prompt"
+                initial={{ scale: 0.92, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.92, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                className="text-center w-full max-w-sm px-4 sm:px-6"
+              >
+                <motion.div
+                  animate={{ y: [0, -5, 0] }}
+                  transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                  className="mb-6"
+                >
+                  <div className="relative mx-auto w-fit">
+                    <ShieldCheck className="text-red-400" size={44} />
+                    <motion.div
+                      className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-red-400"
+                      animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                    />
+                  </div>
+                </motion.div>
+                <h2 className="font-display text-2xl sm:text-3xl font-bold mb-2 text-foreground" style={{ color: "#ff6060" }}>
+                  Verify Identity
+                </h2>
+                <p className="text-muted-foreground font-body text-sm mb-6 tracking-wide">
+                  Enter admin email to receive OTP
+                </p>
+
+                <input
+                  type="email"
+                  value={adminEmailInput}
+                  onChange={(e) => setAdminEmailInput(e.target.value)}
+                  placeholder="admin@example.com"
+                  className="w-full bg-transparent border border-red-500/20 rounded-lg px-4 py-3 text-center text-foreground font-body text-sm outline-none focus:border-red-500/40 transition-colors mb-6"
+                  disabled={otpSending}
+                />
+
+                <motion.button
+                  onClick={async () => {
+                    if (!adminEmailInput.trim()) return;
+                    const sent = await sendOtp("admin_verify", adminEmailInput);
+                    if (sent) setStage("admin_otp");
+                  }}
+                  disabled={otpSending || !adminEmailInput.trim()}
+                  className="w-full py-3 rounded-lg font-body text-sm font-semibold transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                  style={{ background: "rgba(255,96,96,0.15)", border: "1px solid rgba(255,96,96,0.3)", color: "#ff8080" }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {otpSending ? <Loader2 size={16} className="animate-spin" /> : "Send OTP"}
+                </motion.button>
+
+                <div className="mt-4">
+                  <motion.button
+                    onClick={() => { setStage("pin"); setAdminEmailInput(""); }}
+                    className="text-xs text-muted-foreground hover:text-primary font-body transition-colors"
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    Cancel
+                  </motion.button>
+                </div>
+              </motion.div>
+            )}
+
             {/* ── Stage: Admin OTP Verification ── */}
             {stage === "admin_otp" && (
               <motion.div
@@ -646,7 +717,7 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
                 </motion.button>
                 <div className="mt-4 flex items-center justify-center gap-2">
                   <motion.button
-                    onClick={() => sendOtp("admin_verify")}
+                    onClick={() => sendOtp("admin_verify", adminEmailInput)}
                     disabled={otpResendCooldown > 0 || otpSending}
                     className="text-xs text-muted-foreground hover:text-primary font-body transition-colors flex items-center gap-1 disabled:opacity-40"
                     whileTap={{ scale: 0.95 }}
