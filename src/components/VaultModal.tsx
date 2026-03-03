@@ -267,7 +267,12 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
       if (data.isAdmin && data.requiresOtp) {
         // Admin: Prompt for email
         setStage("admin_email_prompt");
+      } else if (data.isAdmin && !data.requiresOtp) {
+        // Admin: Cached active OTP Session allows direct entry
+        setStage("admin_vault");
+        fetchFiles(enteredPin);
       } else {
+        // Normal Vault User
         setStage("vault");
         fetchFiles(enteredPin);
       }
@@ -1252,19 +1257,32 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
                       {files.length} specimen{files.length !== 1 ? "s" : ""} archived
                     </p>
                   </div>
-                  <div className="flex gap-2 shrink-0">
+                  <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
                     {isAdmin && (
-                      <motion.button
-                        onClick={() => setShowAdminPinPanel(!showAdminPinPanel)}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg porthole-heavy font-body text-sm transition-all touch-target"
-                        style={{ color: "#ff8080", borderColor: "rgba(255,96,96,0.3)" }}
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                        title="Manage PINs"
-                      >
-                        <Settings size={15} />
-                        <span className="hidden sm:inline">PIN Settings</span>
-                      </motion.button>
+                      <>
+                        <motion.button
+                          onClick={() => setShowAdminPinPanel(!showAdminPinPanel)}
+                          className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg porthole-heavy font-body text-sm transition-all touch-target"
+                          style={{ color: "#ff8080", borderColor: "rgba(255,96,96,0.3)" }}
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.97 }}
+                          title="Manage PINs"
+                        >
+                          <Settings size={15} />
+                          <span className="hidden sm:inline">PIN Settings</span>
+                        </motion.button>
+                        <motion.button
+                          onClick={() => { setShowAdminPinPanel(false); setOtpSendErrorMsg(""); setEmailChangeErrorMsg(""); startChangeAdminEmail(); }}
+                          className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg porthole-heavy font-body text-sm transition-all touch-target"
+                          style={{ color: "#ff8080", borderColor: "rgba(255,160,122,0.3)" }}
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.97 }}
+                          title="Change Admin Email"
+                        >
+                          <Mail size={15} />
+                          <span className="hidden sm:inline">Change Email</span>
+                        </motion.button>
+                      </>
                     )}
                     <motion.button
                       onClick={() => fileInputRef.current?.click()}
@@ -1367,248 +1385,219 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
                             animate={{ opacity: 1 }}
                             className="text-green-400 font-body text-xs flex items-center gap-1"
                           >
-                            <CheckCircle size={11} /> PIN updated successfully!
-                          </motion.p>
+                            {/* Drag & Drop zone */}
+                            <motion.div
+                              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                              onDragLeave={() => setDragging(false)}
+                              onDrop={(e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files) handleFiles(e.dataTransfer.files); }}
+                              onClick={() => fileInputRef.current?.click()}
+                              animate={dragging ? { scale: 1.02 } : { scale: 1 }}
+                              transition={{ duration: 0.15 }}
+                              className={`relative border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all duration-200
+                    ${dragging
+                                  ? "border-primary/80 bg-primary/5 glow-teal"
+                                  : isAdmin
+                                    ? "border-red-500/20 hover:border-red-500/40 hover:bg-red-500/5"
+                                    : "border-border/40 hover:border-primary/40 hover:bg-primary/5"
+                                }`}
+                            >
+                              <CloudUpload
+                                className={`mx-auto mb-1 transition-colors ${dragging ? "text-primary" : "text-muted-foreground/50"}`}
+                                size={22}
+                              />
+                              <p className="text-muted-foreground font-body text-xs">
+                                {dragging ? "Release to upload" : "Drag & drop PDFs here, or click to browse"}
+                              </p>
+                              <p className="text-muted-foreground/50 font-body text-xs mt-0.5">Multiple files supported · 50 MB max each</p>
+                            </motion.div>
+
+                            {/* Upload queue */}
+                            <AnimatePresence>
+                              {uploadQueue.length > 0 && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: "auto" }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="space-y-1.5">
+                                    {uploadQueue.map((item, idx) => (
+                                      <motion.div
+                                        key={`${item.file.name}-${idx}`}
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: idx * 0.04 }}
+                                        className="porthole-heavy rounded-lg px-3 py-2 flex items-center gap-3"
+                                      >
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-foreground font-body text-xs truncate">{item.file.name}</p>
+                                          {item.status === "uploading" && (
+                                            <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden">
+                                              <motion.div
+                                                className="h-full bg-primary rounded-full"
+                                                animate={{ width: `${item.progress}%` }}
+                                                transition={{ duration: 0.3, ease: "easeOut" }}
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="shrink-0">
+                                          {item.status === "pending" && <Loader2 size={14} className="text-muted-foreground animate-spin" />}
+                                          {item.status === "uploading" && <Loader2 size={14} className="text-primary animate-spin" />}
+                                          {item.status === "done" && <CheckCircle size={14} className="text-green-400" />}
+                                          {item.status === "error" && <AlertCircle size={14} className="text-destructive" />}
+                                        </div>
+                                      </motion.div>
+                                    ))}
+                                  </div>
+                                  {hasDoneOrError && !isUploading && (
+                                    <motion.button
+                                      initial={{ opacity: 0 }}
+                                      animate={{ opacity: 1 }}
+                                      onClick={clearDoneUploads}
+                                      className="mt-1.5 text-xs text-muted-foreground hover:text-primary font-body transition-colors"
+                                    >
+                                      Clear completed
+                                    </motion.button>
+                                  )}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+
+                            {/* File list */}
+                            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                              {loading ? (
+                                <div className="flex items-center justify-center py-10">
+                                  <Loader2 className="animate-spin text-primary" size={28} />
+                                </div>
+                              ) : files.length === 0 ? (
+                                <motion.div
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  className="text-center py-10"
+                                >
+                                  <FileText className="mx-auto mb-3 text-muted-foreground/40" size={36} />
+                                  <p className="text-muted-foreground font-body text-sm">
+                                    The vault is empty. Upload your first specimen.
+                                  </p>
+                                </motion.div>
+                              ) : (
+                                <AnimatePresence>
+                                  {files.map((file, index) => {
+                                    const displayName = file.name.replace(/^\d+-/, "");
+                                    const isDownloading = downloadingFiles.has(file.name);
+                                    const isDeleting = deletingFiles.has(file.name);
+                                    const isRenaming = renamingFile === file.name;
+
+                                    return (
+                                      <motion.div
+                                        key={file.name}
+                                        layout
+                                        initial={{ opacity: 0, x: -16 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 16, height: 0 }}
+                                        transition={{ delay: index * 0.04, layout: { duration: 0.2 } }}
+                                        className={`porthole-heavy rounded-lg p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 group ${isAdmin ? "hover:border-red-500/20" : ""}`}
+                                      >
+                                        <FileText
+                                          className={`shrink-0 ${isAdmin ? "text-red-400/70" : "text-primary"}`}
+                                          size={20}
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                          {isRenaming ? (
+                                            <div className="flex items-center gap-2">
+                                              <input
+                                                ref={renameInputRef}
+                                                type="text"
+                                                value={renameValue}
+                                                onChange={(e) => setRenameValue(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                  if (e.key === "Enter") handleRename(file.name);
+                                                  if (e.key === "Escape") { setRenamingFile(null); setRenameValue(""); }
+                                                }}
+                                                className="flex-1 bg-transparent border-b border-primary/50 outline-none text-foreground font-body text-sm pb-0.5 focus:border-primary"
+                                                placeholder="New file name..."
+                                                maxLength={100}
+                                              />
+                                              <motion.button
+                                                onClick={() => handleRename(file.name)}
+                                                disabled={savingRename || !renameValue.trim()}
+                                                className="p-1 text-green-400 hover:text-green-300 disabled:opacity-40 transition-colors"
+                                                whileTap={{ scale: 0.9 }}
+                                              >
+                                                {savingRename ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                              </motion.button>
+                                              <motion.button
+                                                onClick={() => { setRenamingFile(null); setRenameValue(""); }}
+                                                className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                                                whileTap={{ scale: 0.9 }}
+                                              >
+                                                <XCircle size={14} />
+                                              </motion.button>
+                                            </div>
+                                          ) : (
+                                            <>
+                                              <p className="text-foreground font-body text-sm truncate">{displayName}</p>
+                                              <p className="text-muted-foreground font-body text-xs">
+                                                {formatSize(file.size)} · {formatDate(file.created_at)}
+                                              </p>
+                                            </>
+                                          )}
+                                        </div>
+
+                                        {!isRenaming && (
+                                          <div className="flex gap-1 shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
+                                            <motion.button
+                                              onClick={() => handleDownload(file.name)}
+                                              disabled={isDownloading}
+                                              className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-primary transition-colors touch-target disabled:opacity-40"
+                                              whileHover={{ scale: 1.12 }}
+                                              whileTap={{ scale: 0.9 }}
+                                              aria-label="Download"
+                                            >
+                                              {isDownloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                                            </motion.button>
+
+                                            {isAdmin && (
+                                              <motion.button
+                                                onClick={() => startRename(file)}
+                                                className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-yellow-400 transition-colors touch-target"
+                                                whileHover={{ scale: 1.12 }}
+                                                whileTap={{ scale: 0.9 }}
+                                                aria-label="Rename"
+                                              >
+                                                <Pencil size={16} />
+                                              </motion.button>
+                                            )}
+
+                                            {isAdmin && (
+                                              <motion.button
+                                                onClick={() => handleDelete(file.name)}
+                                                disabled={isDeleting}
+                                                className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors touch-target disabled:opacity-40"
+                                                whileHover={{ scale: 1.12 }}
+                                                whileTap={{ scale: 0.9 }}
+                                                aria-label="Delete"
+                                              >
+                                                {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                                              </motion.button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </motion.div>
+                                    );
+                                  })}
+                                </AnimatePresence>
+                              )}
+                            </div>
+                          </motion.div>
                         )}
 
-                        <motion.button
-                          onClick={handleAdminChangePin}
-                          disabled={adminPinChanging || adminNewPin.length < 4 || adminNewPinConfirm.length < 4}
-                          className="flex items-center gap-2 px-4 py-2 rounded-lg font-body text-xs font-semibold transition-all disabled:opacity-40"
-                          style={{ background: "rgba(255,96,96,0.15)", border: "1px solid rgba(255,96,96,0.3)", color: "#ff8080" }}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                        >
-                          {adminPinChanging ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                          Update PIN
-                        </motion.button>
-                        <div className="pt-2 border-t border-red-500/20 mt-2">
-                          <motion.button
-                            onClick={() => { setShowAdminPinPanel(false); setOtpSendErrorMsg(""); setEmailChangeErrorMsg(""); startChangeAdminEmail(); }}
-                            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg font-body text-xs transition-colors hover:bg-red-500/10 text-red-400"
-                          >
-                            <Mail size={13} />
-                            Change Registered Admin Email
-                          </motion.button>
-                        </div>
-                      </div>
+                      </AnimatePresence>
                     </motion.div>
                   )}
                 </AnimatePresence>
-
-                {/* Drag & Drop zone */}
-                <motion.div
-                  onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-                  onDragLeave={() => setDragging(false)}
-                  onDrop={(e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files) handleFiles(e.dataTransfer.files); }}
-                  onClick={() => fileInputRef.current?.click()}
-                  animate={dragging ? { scale: 1.02 } : { scale: 1 }}
-                  transition={{ duration: 0.15 }}
-                  className={`relative border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all duration-200
-                    ${dragging
-                      ? "border-primary/80 bg-primary/5 glow-teal"
-                      : isAdmin
-                        ? "border-red-500/20 hover:border-red-500/40 hover:bg-red-500/5"
-                        : "border-border/40 hover:border-primary/40 hover:bg-primary/5"
-                    }`}
-                >
-                  <CloudUpload
-                    className={`mx-auto mb-1 transition-colors ${dragging ? "text-primary" : "text-muted-foreground/50"}`}
-                    size={22}
-                  />
-                  <p className="text-muted-foreground font-body text-xs">
-                    {dragging ? "Release to upload" : "Drag & drop PDFs here, or click to browse"}
-                  </p>
-                  <p className="text-muted-foreground/50 font-body text-xs mt-0.5">Multiple files supported · 50 MB max each</p>
-                </motion.div>
-
-                {/* Upload queue */}
-                <AnimatePresence>
-                  {uploadQueue.length > 0 && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="space-y-1.5">
-                        {uploadQueue.map((item, idx) => (
-                          <motion.div
-                            key={`${item.file.name}-${idx}`}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: idx * 0.04 }}
-                            className="porthole-heavy rounded-lg px-3 py-2 flex items-center gap-3"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <p className="text-foreground font-body text-xs truncate">{item.file.name}</p>
-                              {item.status === "uploading" && (
-                                <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden">
-                                  <motion.div
-                                    className="h-full bg-primary rounded-full"
-                                    animate={{ width: `${item.progress}%` }}
-                                    transition={{ duration: 0.3, ease: "easeOut" }}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                            <div className="shrink-0">
-                              {item.status === "pending" && <Loader2 size={14} className="text-muted-foreground animate-spin" />}
-                              {item.status === "uploading" && <Loader2 size={14} className="text-primary animate-spin" />}
-                              {item.status === "done" && <CheckCircle size={14} className="text-green-400" />}
-                              {item.status === "error" && <AlertCircle size={14} className="text-destructive" />}
-                            </div>
-                          </motion.div>
-                        ))}
-                      </div>
-                      {hasDoneOrError && !isUploading && (
-                        <motion.button
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          onClick={clearDoneUploads}
-                          className="mt-1.5 text-xs text-muted-foreground hover:text-primary font-body transition-colors"
-                        >
-                          Clear completed
-                        </motion.button>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* File list */}
-                <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-                  {loading ? (
-                    <div className="flex items-center justify-center py-10">
-                      <Loader2 className="animate-spin text-primary" size={28} />
-                    </div>
-                  ) : files.length === 0 ? (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-center py-10"
-                    >
-                      <FileText className="mx-auto mb-3 text-muted-foreground/40" size={36} />
-                      <p className="text-muted-foreground font-body text-sm">
-                        The vault is empty. Upload your first specimen.
-                      </p>
-                    </motion.div>
-                  ) : (
-                    <AnimatePresence>
-                      {files.map((file, index) => {
-                        const displayName = file.name.replace(/^\d+-/, "");
-                        const isDownloading = downloadingFiles.has(file.name);
-                        const isDeleting = deletingFiles.has(file.name);
-                        const isRenaming = renamingFile === file.name;
-
-                        return (
-                          <motion.div
-                            key={file.name}
-                            layout
-                            initial={{ opacity: 0, x: -16 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 16, height: 0 }}
-                            transition={{ delay: index * 0.04, layout: { duration: 0.2 } }}
-                            className={`porthole-heavy rounded-lg p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 group ${isAdmin ? "hover:border-red-500/20" : ""}`}
-                          >
-                            <FileText
-                              className={`shrink-0 ${isAdmin ? "text-red-400/70" : "text-primary"}`}
-                              size={20}
-                            />
-                            <div className="flex-1 min-w-0">
-                              {isRenaming ? (
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    ref={renameInputRef}
-                                    type="text"
-                                    value={renameValue}
-                                    onChange={(e) => setRenameValue(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") handleRename(file.name);
-                                      if (e.key === "Escape") { setRenamingFile(null); setRenameValue(""); }
-                                    }}
-                                    className="flex-1 bg-transparent border-b border-primary/50 outline-none text-foreground font-body text-sm pb-0.5 focus:border-primary"
-                                    placeholder="New file name..."
-                                    maxLength={100}
-                                  />
-                                  <motion.button
-                                    onClick={() => handleRename(file.name)}
-                                    disabled={savingRename || !renameValue.trim()}
-                                    className="p-1 text-green-400 hover:text-green-300 disabled:opacity-40 transition-colors"
-                                    whileTap={{ scale: 0.9 }}
-                                  >
-                                    {savingRename ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                                  </motion.button>
-                                  <motion.button
-                                    onClick={() => { setRenamingFile(null); setRenameValue(""); }}
-                                    className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                                    whileTap={{ scale: 0.9 }}
-                                  >
-                                    <XCircle size={14} />
-                                  </motion.button>
-                                </div>
-                              ) : (
-                                <>
-                                  <p className="text-foreground font-body text-sm truncate">{displayName}</p>
-                                  <p className="text-muted-foreground font-body text-xs">
-                                    {formatSize(file.size)} · {formatDate(file.created_at)}
-                                  </p>
-                                </>
-                              )}
-                            </div>
-
-                            {!isRenaming && (
-                              <div className="flex gap-1 shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
-                                <motion.button
-                                  onClick={() => handleDownload(file.name)}
-                                  disabled={isDownloading}
-                                  className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-primary transition-colors touch-target disabled:opacity-40"
-                                  whileHover={{ scale: 1.12 }}
-                                  whileTap={{ scale: 0.9 }}
-                                  aria-label="Download"
-                                >
-                                  {isDownloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-                                </motion.button>
-
-                                {isAdmin && (
-                                  <motion.button
-                                    onClick={() => startRename(file)}
-                                    className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-yellow-400 transition-colors touch-target"
-                                    whileHover={{ scale: 1.12 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    aria-label="Rename"
-                                  >
-                                    <Pencil size={16} />
-                                  </motion.button>
-                                )}
-
-                                {isAdmin && (
-                                  <motion.button
-                                    onClick={() => handleDelete(file.name)}
-                                    disabled={isDeleting}
-                                    className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors touch-target disabled:opacity-40"
-                                    whileHover={{ scale: 1.12 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    aria-label="Delete"
-                                  >
-                                    {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                                  </motion.button>
-                                )}
-                              </div>
-                            )}
-                          </motion.div>
-                        );
-                      })}
-                    </AnimatePresence>
-                  )}
-                </div>
-              </motion.div>
-            )}
-
-          </AnimatePresence>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
+                );
 };
 
-export default VaultModal;
+                export default VaultModal;

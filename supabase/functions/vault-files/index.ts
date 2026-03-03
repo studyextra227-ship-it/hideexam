@@ -14,46 +14,58 @@ serve(async (req) => {
   try {
     const { pin } = await req.json();
 
-    const vaultPin = Deno.env.get("VAULT_PIN");
-    const adminPin = Deno.env.get("ADMIN_PIN");
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const { data: rows } = await supabase
+      .from("otp_codes")
+      .select("purpose, otp_hash")
+      .in("purpose", ["vault_pin", "admin_pin"]);
+
+    const dbVaultPin = rows?.find((r) => r.purpose === "vault_pin")?.otp_hash;
+    const dbAdminPin = rows?.find((r) => r.purpose === "admin_pin")?.otp_hash;
+
+    const vaultPin = dbVaultPin || Deno.env.get("VAULT_PIN");
+    const adminPin = dbAdminPin || Deno.env.get("ADMIN_PIN");
+
     if (!pin || (pin !== vaultPin && pin !== adminPin)) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { data, error } = await supabase.storage.from("pdfs").list("", {
-      sortBy: { column: "created_at", order: "desc" },
-    });
+const { data, error } = await supabase.storage.from("pdfs").list("", {
+  sortBy: { column: "created_at", order: "desc" },
+});
 
-    if (error) {
-      return new Response(
-        JSON.stringify({ error: error.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+if (error) {
+  return new Response(
+    JSON.stringify({ error: error.message }),
+    { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
 
-    const files = (data || []).map((f) => ({
-      name: f.name,
-      size: f.metadata?.size || 0,
-      created_at: f.created_at,
-      id: f.id,
-    }));
+const files = (data || []).map((f) => ({
+  name: f.name,
+  size: f.metadata?.size || 0,
+  created_at: f.created_at,
+  id: f.id,
+}));
 
-    return new Response(
-      JSON.stringify({ files }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+return new Response(
+  JSON.stringify({ files }),
+  { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+);
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
+  return new Response(
+    JSON.stringify({ error: String(err) }),
+    { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
 });
