@@ -166,6 +166,7 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
   const [adminEmailInput, setAdminEmailInput] = useState("");
   const [maskedEmail, setMaskedEmail] = useState("");
   const [otpResendCooldown, setOtpResendCooldown] = useState(0);
+  const [otpSendErrorMsg, setOtpSendErrorMsg] = useState("");
 
   // New PIN (for forgot flow)
   const [newPin, setNewPin] = useState("");
@@ -173,6 +174,7 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
   const [pinMismatch, setPinMismatch] = useState(false);
   const [savingPin, setSavingPin] = useState(false);
   const [pinSaved, setPinSaved] = useState(false);
+  const [pinSaveErrorMsg, setPinSaveErrorMsg] = useState("");
 
   // Vault state
   const [files, setFiles] = useState<VaultFile[]>([]);
@@ -223,19 +225,21 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
 
   const sendOtp = async (purpose: "admin_verify" | "pin_reset", extraEmail?: string) => {
     setOtpSending(true);
+    setOtpSendErrorMsg("");
     try {
       const payload: any = { purpose };
       if (extraEmail) payload.email = extraEmail.trim();
 
       const { data, error } = await supabase.functions.invoke("send-otp", { body: payload });
       if (error || !data?.success) {
-        alert("Failed to send OTP. Check ADMIN_EMAIL and RESEND_API_KEY secrets.");
+        setOtpSendErrorMsg(data?.error || "Failed to send OTP. Please try again.");
         return false;
       }
       setMaskedEmail(data.maskedEmail || "");
       setOtpResendCooldown(60);
       return true;
     } catch {
+      setOtpSendErrorMsg("Network error trying to send OTP. Please try again.");
       return false;
     } finally {
       setOtpSending(false);
@@ -315,6 +319,7 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
   };
 
   const saveNewPin = async () => {
+    setPinSaveErrorMsg("");
     if (newPin.length !== 4 || newPin !== newPinConfirm) {
       setPinMismatch(true);
       setTimeout(() => setPinMismatch(false), 1500);
@@ -329,10 +334,10 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
           handleClose();
         }, 2000);
       } else {
-        alert(data?.error || "Failed to reset PIN. Please try again.");
+        setPinSaveErrorMsg(data?.error || "Failed to reset PIN. Please try again.");
       }
     } catch {
-      alert("An error occurred. Please try again.");
+      setPinSaveErrorMsg("An error occurred. Please try again.");
     } finally {
       setSavingPin(false);
     }
@@ -485,6 +490,7 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
     setStage("pin");
     setPin(""); setOtp(""); setNewPin(""); setNewPinConfirm(""); setAdminEmailInput("");
     setPinError(false); setOtpError(false); setPinMismatch(false); setPinSaved(false);
+    setOtpSendErrorMsg(""); setPinSaveErrorMsg("");
     setFiles([]); setUploadQueue([]); setDragging(false);
     setRenamingFile(null); setRenameValue("");
     setShowAdminPinPanel(false);
@@ -577,15 +583,32 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
                     )}
                   </AnimatePresence>
                 </div>
-                <motion.button
-                  onClick={startForgotPin}
-                  disabled={otpSending}
-                  className="mt-6 text-xs text-muted-foreground hover:text-primary font-body transition-colors flex items-center gap-1.5 mx-auto disabled:opacity-50"
-                  whileTap={{ scale: 0.95 }}
-                >
-                  {otpSending ? <Loader2 size={12} className="animate-spin" /> : <KeyRound size={12} />}
-                  Forgot PIN? Reset via email
-                </motion.button>
+                <div className="mt-4 flex flex-col items-center">
+                  <motion.button
+                    onClick={startForgotPin}
+                    disabled={otpSending}
+                    className="text-xs text-muted-foreground hover:text-primary font-body transition-colors flex items-center gap-1.5 mx-auto disabled:opacity-50"
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    {otpSending ? <Loader2 size={12} className="animate-spin" /> : <KeyRound size={12} />}
+                    Forgot PIN? Reset via email
+                  </motion.button>
+                  <AnimatePresence>
+                    {otpSendErrorMsg && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden mt-3"
+                      >
+                        <div className="bg-destructive/10 border border-destructive/20 text-destructive text-xs font-body rounded px-3 py-2 flex items-center gap-1.5">
+                          <AlertCircle size={14} className="shrink-0" />
+                          <span className="text-left leading-tight">{otpSendErrorMsg}</span>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </motion.div>
             )}
 
@@ -625,9 +648,26 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
                   value={adminEmailInput}
                   onChange={(e) => setAdminEmailInput(e.target.value)}
                   placeholder="admin@example.com"
-                  className="w-full bg-transparent border border-red-500/20 rounded-lg px-4 py-3 text-center text-foreground font-body text-sm outline-none focus:border-red-500/40 transition-colors mb-6"
+                  className={`w-full bg-transparent border rounded-lg px-4 py-3 text-center text-foreground font-body text-sm outline-none transition-colors mb-2
+                    ${otpSendErrorMsg ? "border-destructive/50 focus:border-destructive shadow-[0_0_12px_rgba(255,0,0,0.1)]" : "border-red-500/20 focus:border-red-500/40"}`}
                   disabled={otpSending}
                 />
+
+                <div className="min-h-[36px] mb-3 flex items-center justify-center">
+                  <AnimatePresence>
+                    {otpSendErrorMsg && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="text-destructive text-xs font-body flex items-center gap-1"
+                      >
+                        <AlertCircle size={13} />
+                        {otpSendErrorMsg}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
 
                 <motion.button
                   onClick={async () => {
@@ -859,18 +899,33 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
                         />
                       </div>
                     </div>
-                    <AnimatePresence>
-                      {pinMismatch && (
-                        <motion.p
-                          initial={{ opacity: 0, y: -4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0 }}
-                          className="text-destructive text-xs font-body mt-3"
-                        >
-                          PINs do not match
-                        </motion.p>
-                      )}
-                    </AnimatePresence>
+
+                    <div className="min-h-[28px] mt-2 flex flex-col items-center justify-center">
+                      <AnimatePresence>
+                        {pinMismatch && (
+                          <motion.p
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            className="text-destructive text-xs font-body"
+                          >
+                            PINs do not match
+                          </motion.p>
+                        )}
+                        {pinSaveErrorMsg && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            className="bg-destructive/10 border border-destructive/20 text-destructive text-xs font-body rounded px-3 py-2 flex items-center gap-1.5"
+                          >
+                            <AlertCircle size={14} className="shrink-0" />
+                            {pinSaveErrorMsg}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+
                     <motion.button
                       onClick={saveNewPin}
                       disabled={newPin.length < 4 || newPinConfirm.length < 4 || savingPin}
