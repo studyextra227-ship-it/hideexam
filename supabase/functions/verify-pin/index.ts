@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,8 +13,27 @@ serve(async (req) => {
 
   try {
     const { pin } = await req.json();
-    const vaultPin = Deno.env.get("VAULT_PIN");
-    const adminPin = Deno.env.get("ADMIN_PIN");
+
+    // Env fallbacks (used until DB overrides are set)
+    const envVaultPin = Deno.env.get("VAULT_PIN");
+    const envAdminPin = Deno.env.get("ADMIN_PIN");
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Check DB for dynamically-changed PINs
+    const { data: rows } = await supabase
+      .from("otp_codes")
+      .select("purpose, otp_hash")
+      .in("purpose", ["vault_pin", "admin_pin"]);
+
+    const dbVaultPin = rows?.find((r) => r.purpose === "vault_pin")?.otp_hash;
+    const dbAdminPin = rows?.find((r) => r.purpose === "admin_pin")?.otp_hash;
+
+    const vaultPin = dbVaultPin || envVaultPin;
+    const adminPin = dbAdminPin || envAdminPin;
 
     if (!vaultPin) {
       return new Response(
@@ -22,9 +42,10 @@ serve(async (req) => {
       );
     }
 
-    if (pin === adminPin) {
+    if (adminPin && pin === adminPin) {
+      // Admin needs OTP step — return flag for frontend to trigger OTP
       return new Response(
-        JSON.stringify({ valid: true, isAdmin: true }),
+        JSON.stringify({ valid: true, isAdmin: true, requiresOtp: true }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -34,10 +55,10 @@ serve(async (req) => {
       JSON.stringify({ valid, isAdmin: false }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch {
+  } catch (err) {
     return new Response(
-      JSON.stringify({ error: "Invalid request" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: String(err) }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
