@@ -1,0 +1,60 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+serve(async (req) => {
+    if (req.method === "OPTIONS") {
+        return new Response(null, { headers: corsHeaders });
+    }
+
+    try {
+        const { pin, fileName } = await req.json();
+
+        const vaultPin = Deno.env.get("VAULT_PIN");
+        const adminPin = Deno.env.get("ADMIN_PIN");
+        if (!pin || (pin !== vaultPin && pin !== adminPin)) {
+            return new Response(
+                JSON.stringify({ error: "Unauthorized" }),
+                { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+        }
+
+        if (!fileName) {
+            return new Response(
+                JSON.stringify({ error: "fileName required" }),
+                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+        }
+
+        const supabase = createClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+        );
+
+        // Create a signed URL valid for 60 seconds
+        const { data, error } = await supabase.storage
+            .from("pdfs")
+            .createSignedUrl(fileName, 60);
+
+        if (error || !data?.signedUrl) {
+            return new Response(
+                JSON.stringify({ error: error?.message ?? "Failed to create signed URL" }),
+                { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+        }
+
+        return new Response(
+            JSON.stringify({ signedUrl: data.signedUrl }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+    } catch (err) {
+        return new Response(
+            JSON.stringify({ error: String(err) }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+    }
+});

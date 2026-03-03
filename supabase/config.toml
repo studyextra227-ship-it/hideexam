@@ -1,4 +1,4 @@
-project_id = "ttsdnssmharezqyavzlf"
+project_id = "qhiaxfwpcoqptfhhpjgs"
 
 [functions.verify-pin]
 verify_jwt = false
@@ -10,4 +10,10 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.vault-delete]
+verify_jwt = false
+
+[functions.vault-download]
+verify_jwt = false
+
+[functions.vault-rename]
 verify_jwt = false

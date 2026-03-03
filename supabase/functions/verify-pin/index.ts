@@ -13,6 +13,7 @@ serve(async (req) => {
   try {
     const { pin } = await req.json();
     const vaultPin = Deno.env.get("VAULT_PIN");
+    const adminPin = Deno.env.get("ADMIN_PIN");
 
     if (!vaultPin) {
       return new Response(
@@ -21,9 +22,16 @@ serve(async (req) => {
       );
     }
 
+    if (pin === adminPin) {
+      return new Response(
+        JSON.stringify({ valid: true, isAdmin: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const valid = pin === vaultPin;
     return new Response(
-      JSON.stringify({ valid }),
+      JSON.stringify({ valid, isAdmin: false }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch {

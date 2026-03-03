@@ -11,30 +11,23 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
-  plugins: [react()].filter(Boolean),
+  plugins: [react()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
   build: {
-    // Optimize production builds
     target: "esnext",
     outDir: "dist",
     assetsDir: "assets",
     sourcemap: false,
-    // Code splitting strategy
+    minify: "esbuild",
     rollupOptions: {
       output: {
         manualChunks: {
-          // Vendor bundles
-          react: ["react", "react-dom"],
-          framer: ["framer-motion"],
-          radix: [
-            "@radix-ui/react-dialog",
-            "@radix-ui/react-tooltip",
-            "@radix-ui/react-slot",
-          ],
+          react: ["react", "react-dom", "react-router-dom"],
+          motion: ["framer-motion"],
           supabase: ["@supabase/supabase-js"],
         },
       },

@@ -14,7 +14,9 @@ serve(async (req) => {
   try {
     const { pin, fileName } = await req.json();
 
-    if (!pin || pin !== Deno.env.get("VAULT_PIN")) {
+    const vaultPin = Deno.env.get("VAULT_PIN");
+    const adminPin = Deno.env.get("ADMIN_PIN");
+    if (!pin || (pin !== vaultPin && pin !== adminPin)) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
