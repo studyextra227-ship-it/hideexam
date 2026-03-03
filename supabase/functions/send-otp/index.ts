@@ -26,31 +26,30 @@ serve(async (req) => {
 
         if (!adminEmail) {
             return new Response(
-                JSON.stringify({ error: "ADMIN_EMAIL not configured" }),
-                { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                JSON.stringify({ success: false, error: "ADMIN_EMAIL not configured" }),
+                { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
         }
 
         if (purpose === "admin_verify") {
             if (!email) {
                 return new Response(
-                    JSON.stringify({ error: "Email is required to verify admin access" }),
-                    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                    JSON.stringify({ success: false, error: "Email is required to verify admin access." }),
+                    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
                 );
             }
             if (email.toLowerCase().trim() !== adminEmail.toLowerCase().trim()) {
-                // Return a generic error to prevent email guessing, or an explicit one.
                 return new Response(
-                    JSON.stringify({ error: "Invalid admin email provided" }),
-                    { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                    JSON.stringify({ success: false, error: "Incorrect admin email address. Access Denied." }),
+                    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
                 );
             }
         }
 
         if (!resendApiKey) {
             return new Response(
-                JSON.stringify({ error: "RESEND_API_KEY not configured" }),
-                { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                JSON.stringify({ success: false, error: "RESEND_API_KEY not configured" }),
+                { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
         }
 
@@ -70,8 +69,8 @@ serve(async (req) => {
 
         if (dbError) {
             return new Response(
-                JSON.stringify({ error: "Failed to store OTP: " + dbError.message }),
-                { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                JSON.stringify({ success: false, error: "Failed to store OTP: " + dbError.message }),
+                { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
         }
 
@@ -123,8 +122,8 @@ serve(async (req) => {
         if (!emailRes.ok) {
             const errText = await emailRes.text();
             return new Response(
-                JSON.stringify({ error: "Failed to send email: " + errText }),
-                { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                JSON.stringify({ success: false, error: "Failed to send email OTP network check: " + errText }),
+                { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
         }
 
@@ -134,8 +133,8 @@ serve(async (req) => {
         );
     } catch (err) {
         return new Response(
-            JSON.stringify({ error: String(err) }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({ success: false, error: "Internal Server Error: " + String(err) }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
     }
 });
