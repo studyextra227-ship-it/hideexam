@@ -63,7 +63,10 @@ serve(async (req) => {
         await supabase.from("otp_codes").delete().eq("purpose", purpose);
 
         // Grant a session for 15 minutes
-        const grantPurpose = purpose === "admin_verify" ? "admin_granted" : "pin_reset_granted";
+        let grantPurpose = "pin_reset_granted";
+        if (purpose === "admin_verify") grantPurpose = "admin_granted";
+        else if (purpose === "change_email_old") grantPurpose = "change_email_old_granted";
+        else if (purpose === "change_email_new") grantPurpose = "change_email_new_granted";
         const grantExpiry = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
         await supabase

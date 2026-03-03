@@ -33,7 +33,10 @@ type AuthStage =
   | "forgot_otp"     // Forgot PIN: Enter email OTP
   | "forgot_newpin"  // Forgot PIN: Set new PIN
   | "vault"          // Normal vault view
-  | "admin_vault";   // Admin vault view
+  | "admin_vault"    // Admin vault view
+  | "admin_change_email_old_otp"
+  | "admin_change_email_new_input"
+  | "admin_change_email_new_otp";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
@@ -195,6 +198,11 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
   const [adminPinChangeError, setAdminPinChangeError] = useState("");
   const [adminPinChanging, setAdminPinChanging] = useState(false);
   const [adminPinChanged, setAdminPinChanged] = useState(false);
+
+  // Admin Change Email handling
+  const [newAdminEmailInput, setNewAdminEmailInput] = useState("");
+  const [emailChangeErrorMsg, setEmailChangeErrorMsg] = useState("");
+  const [emailChangeSuccess, setEmailChangeSuccess] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -378,6 +386,74 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
     }
   };
 
+  const startChangeAdminEmail = async () => {
+    // Stage 1: Request OTP to old/current email
+    const sent = await sendOtp("change_email_old");
+    if (sent) setStage("admin_change_email_old_otp");
+  };
+
+  const verifyOldEmailOtp = async () => {
+    if (otp.length < 6) return;
+    setOtpVerifying(true);
+    setEmailChangeErrorMsg("");
+    try {
+      const { data } = await supabase.functions.invoke("grant-otp-session", { body: { otp, purpose: "change_email_old" } });
+      if (!data?.valid) {
+        setEmailChangeErrorMsg(data?.error || "Invalid OTP code.");
+        setOtp("");
+        return;
+      }
+      setOtp("");
+      setStage("admin_change_email_new_input");
+    } catch {
+      setEmailChangeErrorMsg("Verification failed.");
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
+
+  const sendNewEmailOtp = async () => {
+    if (!newAdminEmailInput.trim() || !newAdminEmailInput.includes("@")) {
+      setEmailChangeErrorMsg("Please enter a valid email address.");
+      return;
+    }
+    const sent = await sendOtp("change_email_new", newAdminEmailInput);
+    if (sent) setStage("admin_change_email_new_otp");
+  };
+
+  const saveNewAdminEmail = async () => {
+    if (otp.length < 6) return;
+    setOtpVerifying(true);
+    setEmailChangeErrorMsg("");
+    try {
+      // Grant session for new email
+      const { data: grantData } = await supabase.functions.invoke("grant-otp-session", { body: { otp, purpose: "change_email_new" } });
+      if (!grantData?.valid) {
+        setEmailChangeErrorMsg(grantData?.error || "Invalid OTP code.");
+        setOtp("");
+        return;
+      }
+
+      // Manage edge function execution
+      const { data } = await supabase.functions.invoke("manage-email", { body: { action: "admin_change_email", newEmail: newAdminEmailInput.trim(), adminPin: storedPin.current } });
+      if (data?.success) {
+        setEmailChangeSuccess(true);
+        setTimeout(() => {
+          setStage("admin_vault");
+          setOtp("");
+          setNewAdminEmailInput("");
+          setEmailChangeSuccess(false);
+        }, 3000);
+      } else {
+        setEmailChangeErrorMsg(data?.error || "Failed to save new email.");
+      }
+    } catch {
+      setEmailChangeErrorMsg("An error occurred preserving the email.");
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
+
   const fetchFiles = async (p: string) => {
     setLoading(true);
     try {
@@ -495,6 +571,7 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
     setRenamingFile(null); setRenameValue("");
     setShowAdminPinPanel(false);
     setAdminNewPin(""); setAdminNewPinConfirm(""); setAdminPinChangeError(""); setAdminPinChanged(false);
+    setNewAdminEmailInput(""); setEmailChangeErrorMsg(""); setEmailChangeSuccess(false);
     storedPin.current = "";
     onClose();
   };
@@ -609,6 +686,207 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
                     )}
                   </AnimatePresence>
                 </div>
+              </motion.div>
+            )}
+
+            {/* ── Stage: Update Email — Old Email OTP ── */}
+            {stage === "admin_change_email_old_otp" && (
+              <motion.div
+                key="admin_change_email_old_otp"
+                initial={{ scale: 0.92, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.92, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                className="text-center w-full max-w-sm px-4 sm:px-6"
+              >
+                <div className="mb-6 flex justify-center">
+                  <div className="bg-red-500/10 p-4 rounded-full border border-red-500/20">
+                    <ShieldCheck className="text-red-400" size={32} />
+                  </div>
+                </div>
+                <h2 className="font-display text-2xl font-bold mb-2 text-foreground" style={{ color: "#ff6060" }}>
+                  Verify Current Email
+                </h2>
+                <p className="text-muted-foreground font-body text-xs mb-6">
+                  OTP sent to <span className="text-primary">{maskedEmail}</span>
+                </p>
+
+                <OtpInput value={otp} onChange={setOtp} error={!!emailChangeErrorMsg} disabled={otpVerifying} />
+
+                <div className="min-h-[36px] my-3 flex items-center justify-center">
+                  <AnimatePresence>
+                    {emailChangeErrorMsg && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="text-destructive text-xs font-body flex items-center gap-1"
+                      >
+                        <AlertCircle size={13} />
+                        {emailChangeErrorMsg}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <motion.button
+                  onClick={verifyOldEmailOtp}
+                  disabled={otp.length < 6 || otpVerifying}
+                  className="w-full py-3 rounded-lg font-body text-sm font-semibold transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                  style={{ background: "rgba(255,96,96,0.15)", border: "1px solid rgba(255,96,96,0.3)", color: "#ff8080" }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {otpVerifying ? <Loader2 size={16} className="animate-spin" /> : "Verify Identity"}
+                </motion.button>
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <motion.button
+                    onClick={() => { setOtpSendErrorMsg(""); setEmailChangeErrorMsg(""); setStage("admin_vault"); setOtp(""); }}
+                    className="text-xs text-muted-foreground hover:text-primary font-body transition-colors"
+                  >
+                    Cancel
+                  </motion.button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ── Stage: Update Email — New Email Input ── */}
+            {stage === "admin_change_email_new_input" && (
+              <motion.div
+                key="admin_change_email_new_input"
+                initial={{ scale: 0.92, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.92, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                className="text-center w-full max-w-sm px-4 sm:px-6"
+              >
+                <div className="mb-6 flex justify-center">
+                  <div className="bg-red-500/10 p-4 rounded-full border border-red-500/20">
+                    <Mail className="text-red-400" size={32} />
+                  </div>
+                </div>
+                <h2 className="font-display text-2xl font-bold mb-2 text-foreground" style={{ color: "#ff6060" }}>
+                  New Admin Email
+                </h2>
+                <p className="text-muted-foreground font-body text-xs mb-6">
+                  Enter the new address to receive admin OTPs
+                </p>
+
+                <input
+                  type="email"
+                  value={newAdminEmailInput}
+                  onChange={(e) => setNewAdminEmailInput(e.target.value)}
+                  placeholder="new-admin@example.com"
+                  className={`w-full bg-transparent border rounded-lg px-4 py-3 text-center text-foreground font-body text-sm outline-none transition-colors mb-2
+                    ${emailChangeErrorMsg ? "border-destructive/50 focus:border-destructive" : "border-red-500/20 focus:border-red-500/40"}`}
+                  disabled={otpSending}
+                />
+
+                <div className="min-h-[36px] mb-3 flex items-center justify-center">
+                  <AnimatePresence>
+                    {emailChangeErrorMsg && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="text-destructive text-xs font-body flex items-center gap-1"
+                      >
+                        <AlertCircle size={13} />
+                        {emailChangeErrorMsg}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <motion.button
+                  onClick={sendNewEmailOtp}
+                  disabled={otpSending || !newAdminEmailInput.trim()}
+                  className="w-full py-3 rounded-lg font-body text-sm font-semibold transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                  style={{ background: "rgba(255,96,96,0.15)", border: "1px solid rgba(255,96,96,0.3)", color: "#ff8080" }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {otpSending ? <Loader2 size={16} className="animate-spin" /> : "Send Verification OTP"}
+                </motion.button>
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <motion.button
+                    onClick={() => { setOtpSendErrorMsg(""); setEmailChangeErrorMsg(""); setStage("admin_vault"); setOtp(""); }}
+                    className="text-xs text-muted-foreground hover:text-primary font-body transition-colors"
+                  >
+                    Cancel
+                  </motion.button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ── Stage: Update Email — New Email OTP ── */}
+            {stage === "admin_change_email_new_otp" && (
+              <motion.div
+                key="admin_change_email_new_otp"
+                initial={{ scale: 0.92, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.92, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 22 }}
+                className="text-center w-full max-w-sm px-4 sm:px-6"
+              >
+                {emailChangeSuccess ? (
+                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring" }}>
+                    <CheckCircle className="mx-auto text-green-400 mb-4" size={52} />
+                    <h2 className="font-display text-2xl font-bold text-green-400 mb-2">Email Updated!</h2>
+                    <p className="text-muted-foreground font-body text-sm">You will now use {newAdminEmailInput} for OTP verification.</p>
+                  </motion.div>
+                ) : (
+                  <>
+                    <div className="mb-6 flex justify-center">
+                      <div className="bg-red-500/10 p-4 rounded-full border border-red-500/20">
+                        <CheckCircle className="text-red-400" size={32} />
+                      </div>
+                    </div>
+                    <h2 className="font-display text-2xl font-bold mb-2 text-foreground" style={{ color: "#ff6060" }}>
+                      Verify New Email
+                    </h2>
+                    <p className="text-muted-foreground font-body text-xs mb-6">
+                      OTP sent to <span className="text-primary">{maskedEmail}</span>
+                    </p>
+
+                    <OtpInput value={otp} onChange={setOtp} error={!!emailChangeErrorMsg} disabled={otpVerifying} />
+
+                    <div className="min-h-[36px] my-3 flex items-center justify-center">
+                      <AnimatePresence>
+                        {emailChangeErrorMsg && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            className="text-destructive text-xs font-body flex items-center gap-1"
+                          >
+                            <AlertCircle size={13} />
+                            {emailChangeErrorMsg}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+
+                    <motion.button
+                      onClick={saveNewAdminEmail}
+                      disabled={otp.length < 6 || otpVerifying}
+                      className="w-full py-3 rounded-lg font-body text-sm font-semibold transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+                      style={{ background: "rgba(255,96,96,0.15)", border: "1px solid rgba(255,96,96,0.3)", color: "#ff8080" }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      {otpVerifying ? <Loader2 size={16} className="animate-spin" /> : "Confirm New Email"}
+                    </motion.button>
+                    <div className="mt-4 flex items-center justify-center gap-2">
+                      <motion.button
+                        onClick={() => { setOtpSendErrorMsg(""); setEmailChangeErrorMsg(""); setStage("admin_vault"); setOtp(""); }}
+                        className="text-xs text-muted-foreground hover:text-primary font-body transition-colors"
+                      >
+                        Cancel
+                      </motion.button>
+                    </div>
+                  </>
+                )}
               </motion.div>
             )}
 
@@ -1104,6 +1382,15 @@ const VaultModal = ({ isOpen, onClose }: VaultModalProps) => {
                           {adminPinChanging ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
                           Update PIN
                         </motion.button>
+                        <div className="pt-2 border-t border-red-500/20 mt-2">
+                          <motion.button
+                            onClick={() => { setShowAdminPinPanel(false); setOtpSendErrorMsg(""); setEmailChangeErrorMsg(""); startChangeAdminEmail(); }}
+                            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg font-body text-xs transition-colors hover:bg-red-500/10 text-red-400"
+                          >
+                            <Mail size={13} />
+                            Change Registered Admin Email
+                          </motion.button>
+                        </div>
                       </div>
                     </motion.div>
                   )}
